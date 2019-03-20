@@ -139,8 +139,8 @@ namespace Console_Calculator {
             return op;
         }
         
-        internal void Push(double _operand){
-            _operands.Push(_operand);
+        internal void Push(double newOperand){
+            _operands.Push(newOperand);
             if (_verbose) { Console.WriteLine($"Operands stack pushed: {_operands.Peek()}"); }
         }
         
@@ -294,56 +294,56 @@ namespace Console_Calculator {
             if (_verbose) { Console.WriteLine($"Operators stack popped: {op}"); }
             return op;
         }
-        
-        internal bool Push(string _operator){
+
+        internal bool Push(string newOperator){
             if (
-                _operator != null &&
-                !IsCloseParenthesisOp(_operator) && // don't push close parenthesis, instead evaluate expression until a open parenthesis is popped
-                (
-                    _operators.Count() == 0 || // any operator can be pushed into an empty stack
-                    IsOpenParenthesisOp(Peek()) || // any operator can be pushed after an open parenthesis
-                    (
-                        IsExponentiationOp(Peek()) &&
-                        IsExponentiationOp(_operator)
-                    ) || // exponentiation is evaluated from right to left, if new operator and one on top of stack are both exponentiation then push
-                    HasGreaterPrecedence(_operator)
+                newOperator == null || // the new operator is null (error condition: exception) OR
+                IsCloseParenthesisOp(newOperator) || // the new operator is a Close Parenthesis operator (error condition: we should have popped) OR
+                ( // the new operator can't be pushed because it isn't allowed when...
+                    _operators.Any() && // the operators stack isn't empty AND
+                    !IsOpenParenthesisOp(Peek()) && // the top operator on the operators stack is not an Open Parenthesis operator AND
+                    ( // both operators are not the exponentiation operator
+                        !IsExponentiationOp(Peek()) || // the operator on top of the operators stack isn't an exponentiation operator OR
+                        !IsExponentiationOp(newOperator) // the new operator isn't an exponentiation operator
+                    ) && // AND
+                    !HasGreaterPrecedence(newOperator) // the new operator does not have a greater precedence than the operator on the top of the operators stack
                 )
-            ) {
-                _operators.Push(_operator);
-                if (_verbose) { Console.WriteLine($"Operators stack pushed: {Peek()}"); }
-                return true;
+            ) { // then, don't push the new operator onto the operators stack
+                if (_verbose) { Console.WriteLine($"could not push {newOperator} onto Operators stack"); }
+                return false;
             }
             
-            if (_verbose) { Console.WriteLine($"could not push {_operator} onto Operators stack"); }
-            return false;
+            _operators.Push(newOperator);
+            if (_verbose) { Console.WriteLine($"Operators stack pushed: {Peek()}"); }
+            return true;
         }
         
         private bool HasGreaterPrecedence(string newOperator){
-            if (
-                IsOpenParenthesisOp(newOperator) ||
-                IsBinaryOp(newOperator)
-            ) {
-                var topOperator = Peek();
-                if (
-                    OpPrecedence[newOperator] > OpPrecedence[topOperator]
-                ) {
-                    if (_verbose) { Console.WriteLine($"{newOperator} > {topOperator}"); }
-                    return true;
-                }
-                    
-                if (_verbose) { Console.WriteLine($"{newOperator} <= {topOperator}"); }
-
-                return false;
-            } else
             if (
                 IsCloseParenthesisOp(newOperator)
             ) {
                 Console.WriteLine($"{CloseParenthesisOp()} has a high precedence but should not be pushed, instead evaluate using the operator stack until a '{OpenParenthesisOp()}'");
                 return false;
-            } else {
+            }
+
+            if (
+                !IsOpenParenthesisOp(newOperator) &&
+                !IsBinaryOp(newOperator)
+            ) {
                 Console.WriteLine($"operator {newOperator} is not valid");
                 return false;
             }
+
+            var topOperator = Peek();
+            if (
+                OpPrecedence[newOperator] <= OpPrecedence[topOperator]
+            ) {
+                if (_verbose) { Console.WriteLine($"{newOperator} <= {topOperator}"); }
+                return false;
+            }
+                
+            if (_verbose) { Console.WriteLine($"{newOperator} > {topOperator}"); }
+            return true;
 
         }
         
@@ -379,13 +379,14 @@ namespace Console_Calculator {
         private readonly string _expression;
         private readonly bool _verbose;
         
-        public ExpressionEvaluator(string _expression, bool verbose = false){
-            this._expression = _expression.Replace(" ", ""); // space is just formatting
+        public ExpressionEvaluator(string expression, bool verbose = false){
             _verbose = verbose;
-            if (_verbose){ Console.WriteLine($"Expression: {_expression}"); }
+            if (_verbose){ Console.WriteLine($"Expression: {expression}"); }
+            _expression = expression.Replace(" ", ""); // space is just formatting
+            if (_verbose){ Console.WriteLine($"Evaluate Expression: {_expression}"); }
             
-            _operands = new Operands(this._expression.Length, _verbose);
-            _operators = new Operators(this._expression.Length, _verbose);
+            _operands = new Operands(_expression.Length, _verbose);
+            _operators = new Operators(_expression.Length, _verbose);
         }
         
         private double Subtraction(){
@@ -445,15 +446,15 @@ namespace Console_Calculator {
             return ret;
         }
         
-        private int EvaluatePart(string op = null) {
+        private int EvaluatePart(string newOperator = null) {
             var pushedOperator = false;
 
             // try to push operator onto operator stack
             if (
-                op != null &&
-                !Operators.IsCloseParenthesisOp(op)
+                newOperator != null &&
+                !Operators.IsCloseParenthesisOp(newOperator)
             ) {
-                pushedOperator = _operators.Push(op);
+                pushedOperator = _operators.Push(newOperator);
                 if (pushedOperator) {    // pushed the operator
                     return 0;
                 }
@@ -465,15 +466,15 @@ namespace Console_Calculator {
             while (
                 !_operators.IsEmpty() &&
                 (
-                    (op != null && !Operators.IsCloseParenthesisOp(op) && !pushedOperator) || // evaluate until parameter operator is pushed
-                    Operators.IsCloseParenthesisOp(op) || // evaluate expression until an open parenthesis
-                    op == null // evaluate the rest of the expression
+                    (newOperator != null && !Operators.IsCloseParenthesisOp(newOperator) && !pushedOperator) || // evaluate until parameter operator is pushed
+                    Operators.IsCloseParenthesisOp(newOperator) || // evaluate expression until an open parenthesis
+                    newOperator == null // evaluate the rest of the expression
                 )
             ) {
                 topOperator = _operators.Peek();
 
                 if (Operators.IsOpenParenthesisOp(topOperator)) {
-                    var matching = Operators.IsCloseParenthesisOp(op);
+                    var matching = Operators.IsCloseParenthesisOp(newOperator);
                     var prefix = !matching ? "no " : "";
                     if (_verbose) { Console.WriteLine($"'{Operators.OpenParenthesisOp()}' found with {prefix}matching '{Operators.CloseParenthesisOp()}'"); }
                     _operators.Pop();
@@ -535,41 +536,35 @@ namespace Console_Calculator {
                 _operands.Push(result);
 
                 if (
-                    op != null &&
-                    !Operators.IsCloseParenthesisOp(op)
+                    newOperator != null &&
+                    !Operators.IsCloseParenthesisOp(newOperator)
                 ) {
-                    pushedOperator = _operators.Push(op);
+                    pushedOperator = _operators.Push(newOperator);
                 }
             }} // topOperator and result go out of scope
             
-            if (Operators.IsCloseParenthesisOp(op)) {
+            if (Operators.IsCloseParenthesisOp(newOperator)) {
                 Console.WriteLine($"'{Operators.CloseParenthesisOp()}' found with no matching '{Operators.OpenParenthesisOp()}'");
                 return -1;
             }
             return 0;
         }
         
-        private bool EvaluateUntilOperatorPush(string op) {
-            return EvaluatePart(op) == 0;
-        }
+        private bool EvaluateUntilOperatorPush(string newOperator) => EvaluatePart(newOperator) == 0;
         
-        private bool EvaluateUntilOpenParenthesis() {
-            return EvaluatePart(Operators.CloseParenthesisOp()) == 0;
-        }
+        private bool EvaluateUntilOpenParenthesis() => EvaluatePart(Operators.CloseParenthesisOp()) == 0;
         
-        private bool EvaluateUntilDone(){
-            return EvaluatePart() == 0;
-        }
+        private bool EvaluateUntilDone() => EvaluatePart() == 0;
         
         public double? Evaluate(){
-            if (String.IsNullOrWhiteSpace(_expression)) {
+            if (string.IsNullOrWhiteSpace(_expression)) {
                 Console.WriteLine("expression invalid: empty");
                 return null;
             }
             
-            bool pushedOperator = true;
-            for (int i = 0; i < _expression.Length; ++i) {
-                string c = _expression[i].ToString();
+            var pushedOperator = true;
+            for (var i = 0; i < _expression.Length; ++i) {
+                var c = _expression[i].ToString();
                 if (_verbose) { Console.WriteLine($"Evaluate: {c}"); }
                 if (
                     pushedOperator &&
